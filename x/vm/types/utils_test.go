@@ -205,6 +205,26 @@ func createTxResponseData(t *testing.T, key string) ([]byte, []*evmtypes.MsgEthe
 		}
 		txDataBz, _ := proto.Marshal(txData)
 		return txDataBz, []*evmtypes.MsgEthereumTxResponse{evmData}
+	case "legacy":
+		// Simulates a response stored by a legacy Ethermint node.
+		// The binary encoding of fields 1–5 is wire-compatible with the new type; we just
+		// manually set the TypeUrl to the Ethermint value to reproduce the original bug.
+		data := &evmtypes.MsgEthereumTxResponse{
+			Hash:    common.BytesToHash([]byte("legacy_hash")).String(),
+			Logs:    []*evmtypes.Log{createLog(t, testAddress, []string{testTopic}, 0, 0)},
+			Ret:     []byte{0xAB},
+			GasUsed: 21000,
+		}
+		valueBz, _ := proto.Marshal(data)
+		legacyAny := &codectypes.Any{
+			TypeUrl: "/ethermint.evm.v1.MsgEthereumTxResponse",
+			Value:   valueBz,
+		}
+		txData := &sdk.TxMsgData{
+			MsgResponses: []*codectypes.Any{legacyAny},
+		}
+		txDataBz, _ := proto.Marshal(txData)
+		return txDataBz, []*evmtypes.MsgEthereumTxResponse{data}
 	case "invalid":
 		return []byte("invalid protobuf data"), nil
 	case "nil":
@@ -248,6 +268,13 @@ func TestDecodeTxResponses(t *testing.T) {
 			txDataKey:    "mixed",
 			expectError:  false,
 			expectLength: 1, // Only EVM responses are included
+			expectNil:    false,
+		},
+		{
+			name:         "legacy ethermint tx response",
+			txDataKey:    "legacy",
+			expectError:  false,
+			expectLength: 1,
 			expectNil:    false,
 		},
 		{
@@ -301,6 +328,13 @@ func TestDecodeTxResponses(t *testing.T) {
 				if tc.name == "mixed response types" {
 					require.Equal(t, common.BytesToHash([]byte("evm_hash")).String(), results[0].Hash)
 					require.Equal(t, []byte{0x99}, results[0].Ret)
+				}
+
+				if tc.name == "legacy ethermint tx response" {
+					require.Equal(t, common.BytesToHash([]byte("legacy_hash")).String(), results[0].Hash)
+					require.Equal(t, []byte{0xAB}, results[0].Ret)
+					require.Equal(t, uint64(21000), results[0].GasUsed)
+					require.Len(t, results[0].Logs, 1)
 				}
 			}
 		})
@@ -445,6 +479,12 @@ func TestDecodeMsgLogs(t *testing.T) {
 			txDataKey: "mixed",
 			msgIndex:  0,
 			blockNum:  56,
+		},
+		{
+			name:      "legacy ethermint tx response, valid msgIndex 0",
+			txDataKey: "legacy",
+			msgIndex:  0,
+			blockNum:  99,
 		},
 		{
 			name:        "invalid protobuf data",

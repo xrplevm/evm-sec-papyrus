@@ -197,6 +197,26 @@ func TestCalculateBaseFee(t *testing.T) {
 	}
 }
 
+// TestGetBaseFeeZeroDecimals covers the case where Decimals is 0 (out-of-range),
+// which happens when a legacy Ethermint block is queried and GetEvmCoinInfo falls
+// back to its zero-value default. ConversionFactor[0] is not in the map, so it
+// returns a nil math.Int — the guard introduced by the bug-fix must prevent a panic
+// and instead return the raw (already 18-decimal) base fee.
+func TestGetBaseFeeZeroDecimals(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockFeeMarketKeeper := testutil.NewMockFeeMarketKeeper(ctrl)
+	mockFeeMarketKeeper.EXPECT().
+		GetBaseFee(gomock.Any()).
+		Return(sdkmath.LegacyNewDec(1_000_000_000_000_000_000)) // 1e18
+
+	feeMarketWrapper := wrappers.NewFeeMarketWrapper(mockFeeMarketKeeper)
+
+	// Must not panic even though Decimals(0) has no entry in the ConversionFactor map.
+	result := feeMarketWrapper.GetBaseFee(sdk.Context{}, evmtypes.Decimals(0))
+	require.NotNil(t, result)
+	require.Equal(t, big.NewInt(1_000_000_000_000_000_000), result)
+}
+
 func TestGetParams(t *testing.T) {
 	testCases := []struct {
 		name      string

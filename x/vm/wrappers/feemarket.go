@@ -36,7 +36,12 @@ func (w FeeMarketWrapper) GetBaseFee(ctx sdk.Context, decimals types.Decimals) *
 		return nil
 	}
 
-	return baseFee.MulInt(decimals.ConversionFactor()).TruncateInt().BigInt()
+	factor := decimals.ConversionFactor()
+	if factor.IsNil() {
+		// Decimals is 0 or out-of-range (legacy block) — base fee already in 18-decimal form
+		return baseFee.TruncateInt().BigInt()
+	}
+	return baseFee.MulInt(factor).TruncateInt().BigInt()
 }
 
 // CalculateBaseFee returns the calculated base fee converted to 18 decimals.

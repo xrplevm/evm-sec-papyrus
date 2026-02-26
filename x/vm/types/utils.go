@@ -49,6 +49,10 @@ func DecodeTxResponse(in []byte) (*MsgEthereumTxResponse, error) {
 	return responses[0], nil
 }
 
+// legacyMsgEthereumTxResponseTypeURL is the TypeUrl used by legacy Ethermint blocks.
+// The proto wire format is binary-compatible with the new cosmos.evm.vm.v1 type.
+const legacyMsgEthereumTxResponseTypeURL = "/ethermint.evm.v1.MsgEthereumTxResponse"
+
 // DecodeTxResponses decodes a protobuf-encoded byte slice into TxResponses
 func DecodeTxResponses(in []byte) ([]*MsgEthereumTxResponse, error) {
 	if in == nil {
@@ -58,14 +62,16 @@ func DecodeTxResponses(in []byte) ([]*MsgEthereumTxResponse, error) {
 	if err := proto.Unmarshal(in, &txMsgData); err != nil {
 		return nil, err
 	}
+	var zeroResponse MsgEthereumTxResponse
+	newTypeURL := "/" + proto.MessageName(&zeroResponse)
+
 	responses := make([]*MsgEthereumTxResponse, 0, len(txMsgData.MsgResponses))
 	for _, res := range txMsgData.MsgResponses {
-		var response MsgEthereumTxResponse
-		if res.TypeUrl != "/"+proto.MessageName(&response) {
+		if res.TypeUrl != newTypeURL && res.TypeUrl != legacyMsgEthereumTxResponseTypeURL {
 			continue
 		}
-		err := proto.Unmarshal(res.Value, &response)
-		if err != nil {
+		var response MsgEthereumTxResponse
+		if err := proto.Unmarshal(res.Value, &response); err != nil {
 			return nil, errorsmod.Wrap(err, "failed to unmarshal tx response message data")
 		}
 		responses = append(responses, &response)

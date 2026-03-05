@@ -53,8 +53,10 @@ func (k Keeper) MintingEnabled(
 		)
 	}
 
-	// NOTE: ignore amount as only denom is checked on IsSendEnabledCoin
-	coin := sdk.Coin{Denom: pair.Denom}
+	// IsSendEnabledCoin only checks the denom, not the amount, so we construct a
+	// placeholder coin with amount=1 to satisfy the sdk.Coin interface without
+	// altering the function signature.
+	coin := sdk.Coin{Denom: pair.Denom, Amount: math.OneInt()}
 
 	// check if minting to a recipient address other than the sender is enabled
 	// for for the given coin denom
